@@ -1,3 +1,4 @@
+-- dumped by AdukyyMor v2.0.1 -- tag: loadstring -- bytes: 95401 -- extra:
 do
     local PLACE_MURDERERS_VS_SHERIFFS_1 = 135856908115931
     local PLACE_MURDERERS_VS_SHERIFFS_2 = 124848751642883
@@ -16,10 +17,10 @@ do
         local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/download/1.6.66/main.lua"))()
 
         local Window = WindUI:CreateWindow({
-            Title = "rick hub",
+            Title = "Rick hub",
             Theme = "Dark",
-            Author = "rick",
-            Folder = "rick",
+            Author = "https://discord.gg/stevcommunity",
+            Folder = "Rick/beta",
             Acrylic = false,
             Transparent = false,
             NewElements = true,
@@ -49,9 +50,9 @@ Estas funciones aún se encuentran en proceso de optimización para mejorar su e
 ademas en la pestaña de combat o cambate no activen todo por eso se les buguea el script si ya tienen un autoshoot con ese dejenlo no es necesario activar todo.
 
 💬 Si encuentras errores o tienes sugerencias, únete a nuestro servidor de Discord.
-Es importante asi sabran si habra más actualizaciones sobre yisus hub
+Es importante asi sabran si habra más actualizaciones sobre Rick hub
 
-❤️ ¡Gracias por usar rick Hub!
+❤️ ¡Gracias por usar Rick Hub!
 ]]
         })
 
@@ -59,7 +60,7 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
             Title = "📋 Copiar enlace de Discord",
             Desc = "Únete a nuestro servidor oficial",
             Callback = function()
-                local Link = "ri"
+                local Link = "https://discord.gg/stevcommunity"
                 if setclipboard then
                     setclipboard(Link)
                     WindUI:Notify({
@@ -88,6 +89,22 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
         local player            = Players.LocalPlayer
         local camera            = Workspace.CurrentCamera
 
+        -- Force persistent ScreenGuis on WindUI + our own
+        task.spawn(function()
+            local function forcePersist(gui)
+                if gui:IsA("ScreenGui") then
+                    pcall(function() gui.ResetOnSpawn = false end)
+                end
+            end
+            local playerGui = player:WaitForChild("PlayerGui")
+            task.wait(1)
+            for _, gui in ipairs(playerGui:GetChildren()) do forcePersist(gui) end
+            pcall(function() for _, gui in ipairs(CoreGui:GetChildren()) do forcePersist(gui) end end)
+            local conn = playerGui.DescendantAdded:Connect(forcePersist)
+            task.wait(3)
+            conn:Disconnect()
+        end)
+
         local function getCurrentCamera()
             return Workspace.CurrentCamera or camera
         end
@@ -111,9 +128,10 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
         local hitboxRayParams = RaycastParams.new()
         hitboxRayParams.FilterType = Enum.RaycastFilterType.Exclude
 
-        local espEnabled      = false
-        local espColor        = Color3.fromRGB(255, 0, 0)
+        local espEnabled       = false
+        local espColor         = Color3.fromRGB(255, 0, 0)
         local customHighlights = {}
+        local espBillboards    = {}
         local lastHitboxUpdate = 0
         local lastEspUpdate    = 0
 
@@ -150,15 +168,30 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
 
         Tabs.Aim:Section({ Title = "Visuales de Enemigos" })
 
+        local function destroyEspFor(pObj)
+            if customHighlights[pObj] then
+                pcall(function() customHighlights[pObj]:Destroy() end)
+                customHighlights[pObj] = nil
+            end
+            if espBillboards[pObj] then
+                pcall(function() espBillboards[pObj]:Destroy() end)
+                espBillboards[pObj] = nil
+            end
+        end
+
         UIElements.TogEsp = Tabs.Aim:Toggle({
             Title = "Activar ESP",
-            Desc = "RickHub",
+            Desc  = "RickHub",
             Callback = function(s)
                 espEnabled = s
                 if not s then
-                    for v, h in pairs(customHighlights) do
-                        pcall(function() h:Destroy() end)
+                    for v in pairs(customHighlights) do
+                        pcall(function() customHighlights[v]:Destroy() end)
                         customHighlights[v] = nil
+                    end
+                    for v in pairs(espBillboards) do
+                        pcall(function() espBillboards[v]:Destroy() end)
+                        espBillboards[v] = nil
                     end
                 end
             end
@@ -174,7 +207,7 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
 
         Tabs.Aim:Toggle({
             Title = "Activar Hitbox",
-            Desc = "RickHub",
+            Desc  = "RickHub",
             Value = false,
             Callback = function(Value)
                 hitboxEnabled = Value
@@ -203,7 +236,7 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
 
         Tabs.Aim:Toggle({
             Title = "Activar Hitbox",
-            Desc = "RickHub",
+            Desc  = "RickHub",
             Value = false,
             Callback = function(Value)
                 wallHitboxEnabled = Value
@@ -325,6 +358,7 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
                     local humanoid  = character:FindFirstChild("Humanoid")
 
                     if humanoid and humanoid.Health > 0 and isEnemy(playerObj) and not inLobby then
+                        -- Highlight
                         if not customHighlights[playerObj] or not customHighlights[playerObj].Parent then
                             local success, highlight = pcall(function()
                                 local h              = Instance.new("Highlight")
@@ -341,26 +375,116 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
                                 customHighlights[playerObj] = highlight
                             end
                         else
-                            customHighlights[playerObj].Adornee    = character
-                            customHighlights[playerObj].FillColor  = espColor
+                            customHighlights[playerObj].Adornee   = character
+                            customHighlights[playerObj].FillColor = espColor
                         end
-                    elseif customHighlights[playerObj] then
-                        pcall(function() customHighlights[playerObj]:Destroy() end)
-                        customHighlights[playerObj] = nil
+
+                        -- Billboard (name + health)
+                        local billboard = espBillboards[playerObj]
+                        if not billboard or not billboard.Parent then
+                            local head = character:FindFirstChild("Head")
+                            if head then
+                                billboard                    = Instance.new("BillboardGui")
+                                billboard.Name               = "RickEspBillboard"
+                                billboard.Adornee            = head
+                                billboard.Size               = UDim2.new(0, 220, 0, 55)
+                                billboard.StudsOffsetWorldSpace = Vector3.new(0, 2.8, 0)
+                                billboard.AlwaysOnTop        = true
+                                billboard.MaxDistance        = 500
+                                billboard.Parent             = safeEspFolder
+
+                                local nameLabel             = Instance.new("TextLabel")
+                                nameLabel.Name              = "NameTag"
+                                nameLabel.Size              = UDim2.new(1, 0, 0, 20)
+                                nameLabel.Position          = UDim2.new(0, 0, 0, 0)
+                                nameLabel.BackgroundTransparency = 1
+                                nameLabel.Text              = playerObj.Name
+                                nameLabel.TextColor3        = Color3.fromRGB(255, 255, 255)
+                                nameLabel.TextStrokeTransparency = 0
+                                nameLabel.TextStrokeColor3  = Color3.fromRGB(0, 0, 0)
+                                nameLabel.TextSize          = 14
+                                nameLabel.Font              = Enum.Font.GothamBold
+                                nameLabel.Parent            = billboard
+
+                                local hbBg             = Instance.new("Frame")
+                                hbBg.Name              = "HealthBarBg"
+                                hbBg.Size              = UDim2.new(0.7, 0, 0, 6)
+                                hbBg.Position          = UDim2.new(0.15, 0, 0, 22)
+                                hbBg.BackgroundColor3  = Color3.fromRGB(35, 35, 35)
+                                hbBg.BorderSizePixel   = 0
+                                hbBg.Parent            = billboard
+                                local hbBgCorner       = Instance.new("UICorner")
+                                hbBgCorner.CornerRadius = UDim.new(1, 0)
+                                hbBgCorner.Parent      = hbBg
+                                local hbStroke         = Instance.new("UIStroke")
+                                hbStroke.Color         = Color3.fromRGB(0, 0, 0)
+                                hbStroke.Thickness     = 1
+                                hbStroke.Parent        = hbBg
+
+                                local hbFill            = Instance.new("Frame")
+                                hbFill.Name             = "HealthBarFill"
+                                hbFill.Size             = UDim2.new(1, 0, 1, 0)
+                                hbFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+                                hbFill.BorderSizePixel  = 0
+                                hbFill.Parent           = hbBg
+                                local hbFillCorner      = Instance.new("UICorner")
+                                hbFillCorner.CornerRadius = UDim.new(1, 0)
+                                hbFillCorner.Parent     = hbFill
+
+                                local hbText                = Instance.new("TextLabel")
+                                hbText.Name                 = "HealthText"
+                                hbText.Size                 = UDim2.new(1, 0, 0, 16)
+                                hbText.Position             = UDim2.new(0, 0, 0, 30)
+                                hbText.BackgroundTransparency = 1
+                                hbText.Text                 = ""
+                                hbText.TextColor3           = Color3.fromRGB(255, 255, 255)
+                                hbText.TextStrokeTransparency = 0
+                                hbText.TextStrokeColor3     = Color3.fromRGB(0, 0, 0)
+                                hbText.TextSize             = 12
+                                hbText.Font                 = Enum.Font.Gotham
+                                hbText.Parent               = billboard
+
+                                espBillboards[playerObj] = billboard
+                            end
+                        end
+
+                        if billboard then
+                            local head = character:FindFirstChild("Head")
+                            billboard.Adornee = head or character
+
+                            local nameLabel = billboard:FindFirstChild("NameTag")
+                            if nameLabel then nameLabel.Text = playerObj.Name end
+
+                            local hbBg = billboard:FindFirstChild("HealthBarBg")
+                            if hbBg and humanoid then
+                                local fill = hbBg:FindFirstChild("HealthBarFill")
+                                if fill then
+                                    local pct = math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1)
+                                    fill.Size = UDim2.new(pct, 0, 1, 0)
+                                    fill.BackgroundColor3 = Color3.fromRGB(
+                                        math.floor(255 * (1 - pct)),
+                                        math.floor(255 * pct),
+                                        0
+                                    )
+                                end
+                            end
+
+                            local hbText = billboard:FindFirstChild("HealthText")
+                            if hbText and humanoid then
+                                hbText.Text = string.format("%d / %d HP", math.floor(humanoid.Health), math.floor(humanoid.MaxHealth))
+                            end
+                        end
+                    else
+                        destroyEspFor(playerObj)
                     end
-                elseif customHighlights[playerObj] then
-                    pcall(function() customHighlights[playerObj]:Destroy() end)
-                    customHighlights[playerObj] = nil
+                else
+                    destroyEspFor(playerObj)
                 end
             end
         end)
 
         Players.PlayerRemoving:Connect(function(playerObj)
-            local highlight = customHighlights[playerObj]
-            if highlight then
-                pcall(function() highlight:Destroy() end)
-                customHighlights[playerObj] = nil
-            end
+            destroyEspFor(playerObj)
         end)
 
         local playerGui = player:WaitForChild("PlayerGui")
@@ -415,14 +539,14 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
         dzStroke.Thickness    = 2
         dzStroke.LineJoinMode = Enum.LineJoinMode.Round
 
-        local dzLabel                    = Instance.new("TextLabel", deadZoneFrame)
-        dzLabel.Size                     = UDim2.new(1, 0, 1, 0)
-        dzLabel.BackgroundTransparency   = 1
-        dzLabel.Text                     = "ZONA MUERTA\n(Arrastrar)"
-        dzLabel.TextColor3               = Color3.fromRGB(255, 255, 255)
-        dzLabel.Font                     = Enum.Font.GothamBold
-        dzLabel.TextSize                 = 14
-        dzLabel.TextWrapped              = true
+        local dzLabel                  = Instance.new("TextLabel", deadZoneFrame)
+        dzLabel.Size                   = UDim2.new(1, 0, 1, 0)
+        dzLabel.BackgroundTransparency = 1
+        dzLabel.Text                   = "ZONA MUERTA\n(Arrastrar)"
+        dzLabel.TextColor3             = Color3.fromRGB(255, 255, 255)
+        dzLabel.Font                   = Enum.Font.GothamBold
+        dzLabel.TextSize               = 14
+        dzLabel.TextWrapped            = true
 
         makeDraggableSafe(deadZoneFrame, deadZoneFrame)
 
@@ -498,8 +622,8 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
         local silentAimTargetPart    = "Cabeza"
         local silentAimTorsoParts    = { "UpperTorso", "Torso", "HumanoidRootPart" }
 
-        getgenv().rickTargetPart       = nil
-        getgenv().rickAutoShootTarget  = nil
+        getgenv().rickTargetPart      = nil
+        getgenv().rickAutoShootTarget = nil
 
         if hookmetamethod and checkcaller then
             local oldNamecall
@@ -967,8 +1091,8 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
         local function hayEnemigoValidoYVisibleGun()
             local character = player.Character
             if not character or not character:FindFirstChild("HumanoidRootPart") then return false end
-            local rootPart     = character.HumanoidRootPart
-            local mapaActual   = player:GetAttribute("Map")
+            local rootPart      = character.HumanoidRootPart
+            local mapaActual    = player:GetAttribute("Map")
             local partidaActual = player:GetAttribute("Game")
 
             for _, otherPlayer in ipairs(Players:GetPlayers()) do
@@ -1026,10 +1150,7 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
 
         AimTab:Section({ Title = "Silent Aim" })
 
-        local Players           = game:GetService("Players")
-        local RunService        = game:GetService("RunService")
-        local UserInputService  = game:GetService("UserInputService")
-        local LocalPlayer       = Players.LocalPlayer
+        local LocalPlayer = Players.LocalPlayer
 
         local function IsMobile()
             local ok, platform = pcall(function() return UserInputService:GetPlatform() end)
@@ -1097,9 +1218,7 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
             _loopConn      = nil
         }
 
-        SilentAim.Set = function(self, target)
-            self._target = target
-        end
+        SilentAim.Set = function(self, target) self._target = target end
 
         SilentAim.InstallHook = function(self)
             if self._hookInstalled then return true end
@@ -1110,9 +1229,9 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
             local selfRef = self
             local wrap = (type(newcclosure) == "function" and newcclosure) or function(fn) return fn end
             local ok = pcall(function()
-                local mt       = getrawmetatable(game)
-                local oldNC    = mt.__namecall
-                local newNC    = wrap(function(obj, ...)
+                local mt    = getrawmetatable(game)
+                local oldNC = mt.__namecall
+                local newNC = wrap(function(obj, ...)
                     local target = selfRef._target
                     if target and target.Parent and obj == workspace and not checkcaller() then
                         local method = getnamecallmethod()
@@ -1223,51 +1342,62 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
         local InvisFrame, InvisBtn, InvisStroke
         local Theme = { Ghost = Color3.fromRGB(140, 50, 255) }
 
-        local InvisGui          = Instance.new("ScreenGui")
-        InvisGui.Name           = "NexusInvisBtn"
+        local InvisGui       = Instance.new("ScreenGui")
+        InvisGui.Name        = "NexusInvisBtn"
         pcall(function() InvisGui.Parent = game:GetService("CoreGui") end)
         if not InvisGui.Parent then
             InvisGui.Parent = player:WaitForChild("PlayerGui")
         end
-        InvisGui.IgnoreGuiInset  = true
-        InvisGui.ResetOnSpawn    = false
+        InvisGui.IgnoreGuiInset = true
+        InvisGui.ResetOnSpawn   = false
 
-        InvisFrame                       = Instance.new("Frame")
-        InvisFrame.Parent                = InvisGui
-        InvisFrame.Size                  = UDim2.new(0, 80, 0, 30)
-        InvisFrame.Position              = UDim2.new(0.7, 0, 0.6, 0)
-        InvisFrame.BackgroundColor3      = Color3.fromRGB(30, 30, 30)
+        InvisFrame                        = Instance.new("Frame")
+        InvisFrame.Parent                 = InvisGui
+        InvisFrame.Size                   = UDim2.new(0, 80, 0, 30)
+        InvisFrame.Position               = UDim2.new(0.7, 0, 0.6, 0)
+        InvisFrame.BackgroundColor3       = Color3.fromRGB(30, 30, 30)
         InvisFrame.BackgroundTransparency = 0.5
-        InvisFrame.BorderSizePixel       = 0
-        InvisFrame.Visible               = false
+        InvisFrame.BorderSizePixel        = 0
+        InvisFrame.Visible                = false
 
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(0, 6)
         corner.Parent = InvisFrame
 
-        InvisStroke          = Instance.new("UIStroke")
-        InvisStroke.Parent   = InvisFrame
-        InvisStroke.Color    = Theme.Ghost
+        InvisStroke           = Instance.new("UIStroke")
+        InvisStroke.Parent    = InvisFrame
+        InvisStroke.Color     = Theme.Ghost
         InvisStroke.Thickness = 1.5
 
-        InvisBtn                    = Instance.new("TextButton")
-        InvisBtn.Parent             = InvisFrame
-        InvisBtn.Size               = UDim2.new(1, 0, 1, 0)
+        InvisBtn                        = Instance.new("TextButton")
+        InvisBtn.Parent                 = InvisFrame
+        InvisBtn.Size                   = UDim2.new(1, 0, 1, 0)
         InvisBtn.BackgroundTransparency = 1
-        InvisBtn.Text               = "INVISIBLE"
-        InvisBtn.TextColor3         = Theme.Ghost
-        InvisBtn.Font               = Enum.Font.GothamBlack
-        InvisBtn.TextSize           = 11
+        InvisBtn.Text                   = "INVISIBLE"
+        InvisBtn.TextColor3             = Theme.Ghost
+        InvisBtn.Font                   = Enum.Font.GothamBlack
+        InvisBtn.TextSize               = 11
+
+        local function setInvisVisual(on)
+            InvisActive = on
+            if on then
+                InvisBtn.Text       = "ACTIVE"
+                InvisBtn.TextColor3 = Color3.fromRGB(0, 255, 100)
+                InvisStroke.Color   = Color3.fromRGB(0, 255, 100)
+            else
+                InvisBtn.Text       = "INVISIBLE"
+                InvisBtn.TextColor3 = Theme.Ghost
+                InvisStroke.Color   = Theme.Ghost
+            end
+        end
 
         local function SetInvisState(state)
             InvisFrame.Visible = state
             if not state then
-                InvisActive       = false
-                InvisBtn.Text     = "INVISIBLE"
-                InvisBtn.TextColor3 = Theme.Ghost
-                InvisStroke.Color = Theme.Ghost
-                if game.Players.LocalPlayer.Character then
-                    for _, v in pairs(game.Players.LocalPlayer.Character:GetDescendants()) do
+                setInvisVisual(false)
+                local char = game.Players.LocalPlayer.Character
+                if char then
+                    for _, v in pairs(char:GetDescendants()) do
                         if v:IsA("BasePart") and v.Transparency == 0.5 then
                             v.Transparency = 0
                         end
@@ -1278,27 +1408,13 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
 
         local function ToggleInvis()
             if not InvisFrame.Visible then return end
-            InvisActive = not InvisActive
-            if InvisActive then
-                InvisBtn.Text       = "ACTIVE"
-                InvisBtn.TextColor3 = Color3.fromRGB(0, 255, 100)
-                InvisStroke.Color   = Color3.fromRGB(0, 255, 100)
-                if game.Players.LocalPlayer.Character then
-                    for _, v in pairs(game.Players.LocalPlayer.Character:GetDescendants()) do
-                        if v:IsA("BasePart") and v.Transparency == 0 then
-                            v.Transparency = 0.5
-                        end
-                    end
-                end
-            else
-                InvisBtn.Text       = "INVISIBLE"
-                InvisBtn.TextColor3 = Theme.Ghost
-                InvisStroke.Color   = Theme.Ghost
-                if game.Players.LocalPlayer.Character then
-                    for _, v in pairs(game.Players.LocalPlayer.Character:GetDescendants()) do
-                        if v:IsA("BasePart") and v.Transparency == 0.5 then
-                            v.Transparency = 0
-                        end
+            setInvisVisual(not InvisActive)
+            local char = game.Players.LocalPlayer.Character
+            if char then
+                local targetTransparency = InvisActive and 0.5 or 0
+                for _, v in pairs(char:GetDescendants()) do
+                    if v:IsA("BasePart") and v.Transparency == (InvisActive and 0 or 0.5) then
+                        v.Transparency = targetTransparency
                     end
                 end
             end
@@ -1306,7 +1422,7 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
 
         InvisBtn.MouseButton1Click:Connect(ToggleInvis)
 
-        game:GetService("RunService").Heartbeat:Connect(function()
+        RunService.Heartbeat:Connect(function()
             if InvisActive and InvisFrame.Visible then
                 local Char = game.Players.LocalPlayer.Character
                 if Char then
@@ -1314,12 +1430,12 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
                     local Hum  = Char:FindFirstChild("Humanoid")
                     if Root and Hum and Hum.Health > 0 then
                         if Root.Position.Y > 200 then return end
-                        local oldCF       = Root.CFrame
+                        local oldCF        = Root.CFrame
                         local oldCamOffset = Hum.CameraOffset
-                        local invisCF     = oldCF * CFrame.new(0, -60, 0)
-                        Root.CFrame       = invisCF
-                        Hum.CameraOffset  = invisCF:ToObjectSpace(CFrame.new(oldCF.Position)).Position
-                        game:GetService("RunService").RenderStepped:Wait()
+                        local invisCF      = oldCF * CFrame.new(0, -60, 0)
+                        Root.CFrame        = invisCF
+                        Hum.CameraOffset   = invisCF:ToObjectSpace(CFrame.new(oldCF.Position)).Position
+                        RunService.RenderStepped:Wait()
                         if Root and Root.Parent and Hum.Health > 0 then
                             Root.CFrame      = oldCF
                             Hum.CameraOffset = oldCamOffset
@@ -1330,11 +1446,17 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
         end)
 
         game.Players.LocalPlayer.CharacterAdded:Connect(function(character)
-            if InvisFrame.Visible then
-                InvisActive         = false
-                InvisBtn.Text       = "INVISIBLE"
-                InvisBtn.TextColor3 = Theme.Ghost
-                InvisStroke.Color   = Theme.Ghost
+            if InvisFrame.Visible and InvisActive then
+                task.defer(function()
+                    task.wait(0.35)
+                    if character and character.Parent and InvisActive then
+                        for _, v in pairs(character:GetDescendants()) do
+                            if v:IsA("BasePart") and v.Transparency == 0 then
+                                v.Transparency = 0.5
+                            end
+                        end
+                    end
+                end)
             end
         end)
 
@@ -1364,34 +1486,41 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
         local AutoFarmTab = Window:Tab({ Title = "Auto Farm", Icon = "coins" })
         AutoFarmTab:Section({ Title = "Funciones Automáticas" })
 
-        local AutoFarmActivo       = false
-        local autoFarmLoopRunning  = false
+        local AutoFarmActivo      = false
+        local autoFarmLoopRunning = false
+
+        local function startAutoFarmLoop()
+            if autoFarmLoopRunning then return end
+            autoFarmLoopRunning = true
+            task.spawn(function()
+                local container = Workspace:WaitForChild("SpawnablesClient")
+                while AutoFarmActivo do
+                    for _, obj in ipairs(container:GetChildren()) do
+                        if not AutoFarmActivo then break end
+                        local touchPart = obj:FindFirstChild("Touch")
+                        local char = player.Character
+                        if touchPart and char then
+                            local hrp = char:FindFirstChild("HumanoidRootPart")
+                            if hrp then
+                                pcall(function()
+                                    firetouchinterest(hrp, touchPart, 0)
+                                    firetouchinterest(hrp, touchPart, 1)
+                                end)
+                            end
+                        end
+                    end
+                    task.wait(0.45)
+                end
+                autoFarmLoopRunning = false
+            end)
+        end
 
         AutoFarmTab:Toggle({
             Title = "Auto Farm",
             Value = false,
             Callback = function(state)
                 AutoFarmActivo = state
-                if AutoFarmActivo and not autoFarmLoopRunning then
-                    autoFarmLoopRunning = true
-                    task.spawn(function()
-                        local container = Workspace:WaitForChild("SpawnablesClient")
-                        while AutoFarmActivo do
-                            for _, obj in ipairs(container:GetChildren()) do
-                                if not AutoFarmActivo then break end
-                                local touchPart = obj:FindFirstChild("Touch")
-                                if touchPart and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                                    pcall(function()
-                                        firetouchinterest(player.Character.HumanoidRootPart, touchPart, 0)
-                                        firetouchinterest(player.Character.HumanoidRootPart, touchPart, 1)
-                                    end)
-                                end
-                            end
-                            task.wait(0.45)
-                        end
-                        autoFarmLoopRunning = false
-                    end)
-                end
+                if AutoFarmActivo then startAutoFarmLoop() end
             end
         })
 
@@ -1417,7 +1546,7 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
                 local char = player.Character
                 local hum  = char and char:FindFirstChildOfClass("Humanoid")
                 local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-                if hrp and hum and hum.MoveDirection.Magnitude > 0 then
+                if hrp and hum and hum.Health > 0 and hum.MoveDirection.Magnitude > 0 then
                     hrp.CFrame = hrp.CFrame + (hum.MoveDirection * _G.SpeedMultiplier)
                 end
             end
@@ -1480,7 +1609,7 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
                 local char = player.Character
                 local hum  = char and char:FindFirstChildOfClass("Humanoid")
                 local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-                if hum and hrp and hum.MoveDirection.Magnitude > 0 then
+                if hum and hrp and hum.Health > 0 and hum.MoveDirection.Magnitude > 0 then
                     hrp.Velocity = Vector3.new(hrp.Velocity.X, 25, hrp.Velocity.Z)
                 end
             end
@@ -1516,12 +1645,12 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
                         end
                     end
                     local mesh = rightLeg:FindFirstChildOfClass("SpecialMesh") or Instance.new("SpecialMesh", rightLeg)
-                    rightLeg.Color       = DARK_GREY_COLOR
+                    rightLeg.Color        = DARK_GREY_COLOR
                     rightLeg.Transparency = 0
-                    mesh.MeshType        = Enum.MeshType.FileMesh
-                    mesh.MeshId          = KORBLOX_MESH_ID
-                    mesh.TextureId       = KORBLOX_TEXTURE_ID
-                    mesh.Scale           = Vector3.new(1, 1, 1)
+                    mesh.MeshType         = Enum.MeshType.FileMesh
+                    mesh.MeshId           = KORBLOX_MESH_ID
+                    mesh.TextureId        = KORBLOX_TEXTURE_ID
+                    mesh.Scale            = Vector3.new(1, 1, 1)
                 end
             end
         end
@@ -1621,11 +1750,6 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
         local TeleportTab = Window:Tab({ Title = "Auto Partida", Icon = "plane" })
         TeleportTab:Section({ Title = "Pad" })
 
-        local Players          = game:GetService("Players")
-        local RunService       = game:GetService("RunService")
-        local ReplicatedStorage = game:GetService("ReplicatedStorage")
-        local LocalPlayer      = Players.LocalPlayer
-
         local PLATFORM_ROWS = { "Right Platforms", "Left Platforms" }
         local PAD_TABLE = {
             ["Right Platforms"] = {
@@ -1649,7 +1773,7 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
             PlatformRow = "Right Platforms"
         }
 
-        local function GetHRP(plr)
+        local function GetHRP2(plr)
             local char = plr and plr.Character
             if not char then return nil end
             local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -1668,8 +1792,8 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
         end
 
         local function IsMatchTimerVisible()
-            local pg   = LocalPlayer:FindFirstChild("PlayerGui")
-            local main = (pg and pg:FindFirstChild("Main")) or pg
+            local pg    = LocalPlayer:FindFirstChild("PlayerGui")
+            local main  = (pg and pg:FindFirstChild("Main")) or pg
             local frame = main and main:FindFirstChild("MainGameFrame")
             local score = frame and frame:FindFirstChild("IngameScore")
             local timer = score and score:FindFirstChild("Timer")
@@ -1699,16 +1823,16 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
 
         local function cleanupExistingResultGuis()
             if not (AutoTeleportConfig.Main or AutoTeleportConfig.Alt) then return end
-            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-            if not playerGui then return end
-            for _, instance in ipairs(playerGui:GetDescendants()) do
+            local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+            if not pGui then return end
+            for _, instance in ipairs(pGui:GetDescendants()) do
                 removeResultGui(instance)
             end
         end
 
         task.spawn(function()
-            local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-            playerGui.DescendantAdded:Connect(function(instance)
+            local pGui = LocalPlayer:WaitForChild("PlayerGui")
+            pGui.DescendantAdded:Connect(function(instance)
                 removeResultGui(instance)
             end)
         end)
@@ -1741,13 +1865,13 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
 
         AutoTeleportHandler.new = function(role)
             return setmetatable({
-                _role            = role or "Main",
-                _running         = false,
-                _conns           = {},
-                _tick            = 0,
-                _lastMove        = 0,
-                _highlightedPad  = nil,
-                _savedPadColor   = nil
+                _role           = role or "Main",
+                _running        = false,
+                _conns          = {},
+                _tick           = 0,
+                _lastMove       = 0,
+                _highlightedPad = nil,
+                _savedPadColor  = nil
             }, AutoTeleportHandler)
         end
 
@@ -1758,7 +1882,7 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
 
         AutoTeleportHandler.IsOnPad = function(self)
             local pad = GetPadPart(self._role)
-            local hrp = GetHRP(LocalPlayer)
+            local hrp = GetHRP2(LocalPlayer)
             if not (pad and hrp) then return false end
             local lp   = pad.CFrame:PointToObjectSpace(hrp.Position)
             local half = pad.Size / 2
@@ -2122,17 +2246,15 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
             EmoteTrack:Play()
         end
 
-        if player.Character then
-            player.Character:WaitForChild("Humanoid").Running:Connect(function(speed)
+        local function bindEmoteStopOnMove(char)
+            local hum = char:WaitForChild("Humanoid")
+            hum.Running:Connect(function(speed)
                 if speed > 0 then StopEmote() end
             end)
         end
 
-        player.CharacterAdded:Connect(function(char)
-            char:WaitForChild("Humanoid").Running:Connect(function(speed)
-                if speed > 0 then StopEmote() end
-            end)
-        end)
+        if player.Character then bindEmoteStopOnMove(player.Character) end
+        player.CharacterAdded:Connect(bindEmoteStopOnMove)
 
         AnimsTab:Dropdown({
             Title = "Seleccionar Emote",
@@ -2165,7 +2287,7 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
         }
 
         local function showBottomMessage(msg)
-            print("[Alexx Hub] " .. msg)
+            print("[Rick Hub] " .. msg)
         end
 
         local function ToggleNubesYAtmo(hide, mode)
@@ -2195,8 +2317,8 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
                 if v:IsA("ColorCorrectionEffect") then cc = v end
             end
             if cc then
-                local morado    = shaderAjustes.PinkMorado
-                local rosa      = shaderAjustes.PinkRosa
+                local morado     = shaderAjustes.PinkMorado
+                local rosa       = shaderAjustes.PinkRosa
                 local saturacion = shaderAjustes.PinkSaturacion
                 cc.Saturation = saturacion
                 cc.TintColor  = Color3.fromRGB(255, 200 - (rosa * 50), 255 - (morado * 100))
@@ -2218,8 +2340,8 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
                 local Terrain  = workspace:FindFirstChildOfClass("Terrain")
                 local cacheFolder = Lighting:FindFirstChild("rickPBRCache")
                 if not cacheFolder then
-                    cacheFolder      = Instance.new("Folder")
-                    cacheFolder.Name = "rickPBRCache"
+                    cacheFolder        = Instance.new("Folder")
+                    cacheFolder.Name   = "rickPBRCache"
                     cacheFolder.Parent = Lighting
                 end
 
@@ -2236,11 +2358,11 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
                                 Terrain:SetAttribute("OrigWaveSize", Terrain.WaterWaveSize)
                                 Terrain:SetAttribute("OrigDeco", Terrain.Decoration)
                             end
-                            Terrain.WaterWaveSize   = 0
-                            Terrain.WaterWaveSpeed  = 0
-                            Terrain.WaterReflectance = 0
+                            Terrain.WaterWaveSize     = 0
+                            Terrain.WaterWaveSpeed    = 0
+                            Terrain.WaterReflectance  = 0
                             Terrain.WaterTransparency = 1
-                            Terrain.Decoration      = false
+                            Terrain.Decoration        = false
                         end)
                     end
                     local function applyLowGraphics(v)
@@ -2257,9 +2379,9 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
                                     v:SetAttribute("OrigMat", v.Material.Name)
                                     v:SetAttribute("OrigCast", v.CastShadow)
                                 end
-                                v.Material      = Enum.Material.SmoothPlastic
-                                v.Reflectance   = 0
-                                v.CastShadow    = false
+                                v.Material    = Enum.Material.SmoothPlastic
+                                v.Reflectance = 0
+                                v.CastShadow  = false
                                 if v:IsA("MeshPart") then
                                     if not v:GetAttribute("OrigTex") then
                                         v:SetAttribute("OrigTex", v.TextureID)
@@ -2433,16 +2555,16 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
                     Sunset.Parent = Lighting
                     table.insert(tokyowamiEffects, Sunset)
 
-                    Lighting.Brightness            = 2.14
-                    Lighting.ColorShift_Bottom     = Color3.fromRGB(11, 0, 20)
-                    Lighting.ColorShift_Top        = Color3.fromRGB(240, 127, 14)
-                    Lighting.OutdoorAmbient        = Color3.fromRGB(34, 0, 49)
-                    Lighting.ClockTime             = 6.7
-                    Lighting.FogColor              = Color3.fromRGB(94, 76, 106)
-                    Lighting.FogEnd                = 1000
-                    Lighting.ExposureCompensation  = 0.24
-                    Lighting.ShadowSoftness        = 0
-                    Lighting.Ambient               = Color3.fromRGB(59, 33, 27)
+                    Lighting.Brightness           = 2.14
+                    Lighting.ColorShift_Bottom    = Color3.fromRGB(11, 0, 20)
+                    Lighting.ColorShift_Top       = Color3.fromRGB(240, 127, 14)
+                    Lighting.OutdoorAmbient       = Color3.fromRGB(34, 0, 49)
+                    Lighting.ClockTime            = 6.7
+                    Lighting.FogColor             = Color3.fromRGB(94, 76, 106)
+                    Lighting.FogEnd               = 1000
+                    Lighting.ExposureCompensation = 0.24
+                    Lighting.ShadowSoftness       = 0
+                    Lighting.Ambient              = Color3.fromRGB(59, 33, 27)
 
                     showBottomMessage("Tokyowami: ON")
                 else
@@ -2541,28 +2663,28 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
                     Tropic.Parent = Lighting
                     table.insert(nightEffects, Tropic)
 
-                    Lighting.ClockTime             = 0
-                    Lighting.Brightness            = 4
-                    Lighting.EnvironmentSpecularScale = 1
-                    Lighting.EnvironmentDiffuseScale  = 1
-                    Lighting.GlobalShadows         = true
-                    Lighting.GeographicLatitude    = shaderAjustes.LunaPos
-                    Lighting.ShadowSoftness        = shaderAjustes.SuavidadSombras
-                    Lighting.ExposureCompensation  = shaderAjustes.Exposicion
-                    Lighting.OutdoorAmbient        = Color3.fromRGB(50, 65, 95)
+                    Lighting.ClockTime                 = 0
+                    Lighting.Brightness                = 4
+                    Lighting.EnvironmentSpecularScale  = 1
+                    Lighting.EnvironmentDiffuseScale   = 1
+                    Lighting.GlobalShadows             = true
+                    Lighting.GeographicLatitude        = shaderAjustes.LunaPos
+                    Lighting.ShadowSoftness            = shaderAjustes.SuavidadSombras
+                    Lighting.ExposureCompensation      = shaderAjustes.Exposicion
+                    Lighting.OutdoorAmbient            = Color3.fromRGB(50, 65, 95)
                     local s = shaderAjustes.Sombras
-                    Lighting.Ambient               = Color3.fromRGB(s, s + 3, s + 10)
-                    Lighting.ColorShift_Bottom     = Color3.fromRGB(25, 40, 60)
-                    Lighting.ColorShift_Top        = Color3.fromRGB(160, 180, 240)
-                    Lighting.FogColor              = Color3.fromRGB(15, 20, 30)
-                    Lighting.FogEnd                = 2500
+                    Lighting.Ambient                   = Color3.fromRGB(s, s + 3, s + 10)
+                    Lighting.ColorShift_Bottom         = Color3.fromRGB(25, 40, 60)
+                    Lighting.ColorShift_Top            = Color3.fromRGB(160, 180, 240)
+                    Lighting.FogColor                  = Color3.fromRGB(15, 20, 30)
+                    Lighting.FogEnd                    = 2500
 
                     if Terrain then
-                        Terrain.WaterWaveSize      = 0.12
-                        Terrain.WaterWaveSpeed     = 8
-                        Terrain.WaterReflectance   = 1
-                        Terrain.WaterTransparency  = 0.85
-                        Terrain.WaterColor         = Color3.fromRGB(15, 25, 45)
+                        Terrain.WaterWaveSize     = 0.12
+                        Terrain.WaterWaveSpeed    = 8
+                        Terrain.WaterReflectance  = 1
+                        Terrain.WaterTransparency = 0.85
+                        Terrain.WaterColor        = Color3.fromRGB(15, 25, 45)
                     end
 
                     showBottomMessage("Noche: ON (Cielo despejado)")
@@ -2659,11 +2781,11 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
                     sky.Parent = Lighting
                     table.insert(pinkEffects, sky)
 
-                    Lighting.Brightness      = 2
-                    Lighting.ClockTime       = 6.7
-                    Lighting.FogColor        = Color3.fromRGB(120, 20, 150)
-                    Lighting.FogEnd          = 1200
-                    Lighting.ShadowSoftness  = 0.2
+                    Lighting.Brightness     = 2
+                    Lighting.ClockTime      = 6.7
+                    Lighting.FogColor       = Color3.fromRGB(120, 20, 150)
+                    Lighting.FogEnd         = 1200
+                    Lighting.ShadowSoftness = 0.2
 
                     UpdatePinkHourVibe()
                     showBottomMessage("Pink Hour: ON")
@@ -2825,84 +2947,84 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
 
         function createFloatButton(config)
             config = config or {}
-            local guiName       = config.name or "FloatButton"
-            local iconName      = config.icon or "circle"
-            local startPos      = config.position or UDim2.new(1, -90, 1, -160)
-            local displayOrder  = config.displayOrder or 997
-            local onToggle      = config.onToggle
-            local isActive      = config.defaultActive or false
-            local isFixed       = false
-            local isHidden      = false
+            local guiName      = config.name or "FloatButton"
+            local iconName     = config.icon or "circle"
+            local startPos     = config.position or UDim2.new(1, -90, 1, -160)
+            local displayOrder = config.displayOrder or 997
+            local onToggle     = config.onToggle
+            local isActive     = config.defaultActive or false
+            local isFixed      = false
+            local isHidden     = false
 
             local colorOn  = Color3.fromRGB(46, 204, 113)
             local colorOff = Color3.fromRGB(220, 50, 50)
             local bgColor  = Color3.fromRGB(22, 22, 22)
 
-            local sg              = Instance.new("ScreenGui")
-            sg.Name               = guiName
-            sg.ResetOnSpawn       = false
-            sg.ZIndexBehavior     = Enum.ZIndexBehavior.Sibling
-            sg.DisplayOrder       = displayOrder
+            local sg          = Instance.new("ScreenGui")
+            sg.Name           = guiName
+            sg.ResetOnSpawn   = false
+            sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            sg.DisplayOrder   = displayOrder
 
-            local btn                       = Instance.new("TextButton")
-            btn.Name                        = "FloatBtn"
-            btn.Size                        = UDim2.new(0, 52, 0, 52)
-            btn.Position                    = startPos
-            btn.AnchorPoint                 = Vector2.new(0.5, 0.5)
-            btn.BackgroundColor3            = bgColor
-            btn.BackgroundTransparency      = 0.15
-            btn.BorderSizePixel             = 0
-            btn.Text                        = ""
-            btn.AutoButtonColor             = false
-            btn.ZIndex                      = 5
-            btn.Parent                      = sg
+            local btn                  = Instance.new("TextButton")
+            btn.Name                   = "FloatBtn"
+            btn.Size                   = UDim2.new(0, 52, 0, 52)
+            btn.Position               = startPos
+            btn.AnchorPoint            = Vector2.new(0.5, 0.5)
+            btn.BackgroundColor3       = bgColor
+            btn.BackgroundTransparency = 0.15
+            btn.BorderSizePixel        = 0
+            btn.Text                   = ""
+            btn.AutoButtonColor        = false
+            btn.ZIndex                 = 5
+            btn.Parent                 = sg
 
             local corner = Instance.new("UICorner")
             corner.CornerRadius = UDim.new(0, 13)
             corner.Parent = btn
 
             local stroke = Instance.new("UIStroke")
-            stroke.Color              = (isActive and colorOn) or colorOff
-            stroke.Thickness          = 1.5
-            stroke.Transparency       = 0
-            stroke.ApplyStrokeMode    = Enum.ApplyStrokeMode.Border
-            stroke.Parent             = btn
+            stroke.Color           = (isActive and colorOn) or colorOff
+            stroke.Thickness       = 1.5
+            stroke.Transparency    = 0
+            stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+            stroke.Parent          = btn
 
             local iconObj = nil
             local lucideAsset = getLucideAsset(iconName, 48)
             if lucideAsset then
-                local img           = Instance.new("ImageLabel")
-                img.Name            = "Icon"
-                img.Size            = UDim2.new(0, 26, 0, 26)
-                img.Position        = UDim2.new(0.5, -13, 0.5, -13)
-                img.BackgroundTransparency = 1
-                img.Image           = lucideAsset.Url
-                img.ImageRectSize   = lucideAsset.ImageRectSize
-                img.ImageRectOffset = lucideAsset.ImageRectOffset
-                img.ScaleType       = Enum.ScaleType.Fit
-                img.ImageColor3     = Color3.fromRGB(255, 255, 255)
-                img.ZIndex          = 6
-                img.Parent          = btn
+                local img                   = Instance.new("ImageLabel")
+                img.Name                    = "Icon"
+                img.Size                    = UDim2.new(0, 26, 0, 26)
+                img.Position                = UDim2.new(0.5, -13, 0.5, -13)
+                img.BackgroundTransparency  = 1
+                img.Image                   = lucideAsset.Url
+                img.ImageRectSize           = lucideAsset.ImageRectSize
+                img.ImageRectOffset         = lucideAsset.ImageRectOffset
+                img.ScaleType               = Enum.ScaleType.Fit
+                img.ImageColor3             = Color3.fromRGB(255, 255, 255)
+                img.ZIndex                  = 6
+                img.Parent                  = btn
                 iconObj = img
             else
-                local lbl              = Instance.new("TextLabel")
-                lbl.Name               = "Icon"
-                lbl.Size               = UDim2.new(1, -6, 1, -6)
-                lbl.Position           = UDim2.new(0, 3, 0, 3)
-                lbl.BackgroundTransparency = 1
-                lbl.Text               = tostring(iconName):upper()
-                lbl.TextSize           = 10
-                lbl.Font               = Enum.Font.GothamBold
-                lbl.TextColor3         = Color3.fromRGB(255, 255, 255)
-                lbl.TextXAlignment     = Enum.TextXAlignment.Center
-                lbl.TextYAlignment     = Enum.TextYAlignment.Center
-                lbl.ZIndex             = 6
-                lbl.Parent             = btn
+                local lbl                   = Instance.new("TextLabel")
+                lbl.Name                    = "Icon"
+                lbl.Size                    = UDim2.new(1, -6, 1, -6)
+                lbl.Position                = UDim2.new(0, 3, 0, 3)
+                lbl.BackgroundTransparency  = 1
+                lbl.Text                    = tostring(iconName):upper()
+                lbl.TextSize                = 10
+                lbl.Font                    = Enum.Font.GothamBold
+                lbl.TextColor3              = Color3.fromRGB(255, 255, 255)
+                lbl.TextXAlignment          = Enum.TextXAlignment.Center
+                lbl.TextYAlignment          = Enum.TextYAlignment.Center
+                lbl.ZIndex                  = 6
+                lbl.Parent                  = btn
                 iconObj = lbl
             end
 
-            local dragging   = false
-            local dragStart  = nil
+            local dragging    = false
+            local dragStart   = nil
             local startBtnPos = nil
 
             btn.InputBegan:Connect(function(inp)
@@ -2968,9 +3090,7 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
                 local newColor = (value and colorOn) or colorOff
                 SafeTween(stroke, TweenInfo.new(0.2), { Color = newColor })
             end
-            api.setFixed = function(value)
-                isFixed = value
-            end
+            api.setFixed = function(value) isFixed = value end
             api.setHidden = function(value)
                 isHidden = value
                 btn.BackgroundTransparency = (value and 1) or 0.15
@@ -2998,14 +3118,14 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
         local allFixed = false
 
         local floatPositions = {
-            Macro            = UDim2.new(1, -70,  0.55, 0),
-            MacroNormal      = UDim2.new(1, -70,  0.62, 0),
-            SilentAim        = UDim2.new(1, -70,  0.69, 0),
-            SilentAimFOV     = UDim2.new(1, -70,  0.76, 0),
-            AutoShoot        = UDim2.new(1, -70,  0.83, 0),
-            AutoShootAgres   = UDim2.new(1, -140, 0.55, 0),
-            AutoEquip        = UDim2.new(1, -140, 0.62, 0),
-            AutoFarm         = UDim2.new(1, -140, 0.83, 0)
+            Macro          = UDim2.new(1, -70,  0.55, 0),
+            MacroNormal    = UDim2.new(1, -70,  0.62, 0),
+            SilentAim      = UDim2.new(1, -70,  0.69, 0),
+            SilentAimFOV   = UDim2.new(1, -70,  0.76, 0),
+            AutoShoot      = UDim2.new(1, -70,  0.83, 0),
+            AutoShootAgres = UDim2.new(1, -140, 0.55, 0),
+            AutoEquip      = UDim2.new(1, -140, 0.62, 0),
+            AutoFarm       = UDim2.new(1, -140, 0.83, 0)
         }
 
         FloatTab:Toggle({
@@ -3190,26 +3310,7 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
                         defaultActive = AutoFarmActivo,
                         onToggle = function(active)
                             AutoFarmActivo = active
-                            if AutoFarmActivo and not autoFarmLoopRunning then
-                                autoFarmLoopRunning = true
-                                task.spawn(function()
-                                    local container = Workspace:WaitForChild("SpawnablesClient")
-                                    while AutoFarmActivo do
-                                        for _, obj in ipairs(container:GetChildren()) do
-                                            if not AutoFarmActivo then break end
-                                            local touchPart = obj:FindFirstChild("Touch")
-                                            if touchPart and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                                                pcall(function()
-                                                    firetouchinterest(player.Character.HumanoidRootPart, touchPart, 0)
-                                                    firetouchinterest(player.Character.HumanoidRootPart, touchPart, 1)
-                                                end)
-                                            end
-                                        end
-                                        task.wait(0.45)
-                                    end
-                                    autoFarmLoopRunning = false
-                                end)
-                            end
+                            if AutoFarmActivo then startAutoFarmLoop() end
                         end
                     })
                     if allFixed then FloatButtons.AutoFarm.setFixed(true) end
@@ -3232,20 +3333,20 @@ Es importante asi sabran si habra más actualizaciones sobre yisus hub
             Value = "Negro",
             Callback = function(Theme)
                 local Themes = {
-                    Negro          = "Dark",
-                    Medianoche    = "Midnight",
-                    Rojo           = "Red",
+                    Negro            = "Dark",
+                    Medianoche       = "Midnight",
+                    Rojo             = "Red",
                     ["Rojo Carmesí"] = "Crimson",
-                    ["Ámbar"]      = "Amber",
-                    Rosa           = "Rose",
-                    Esmeralda      = "Emerald",
-                    Cielo          = "Sky",
-                    Violeta        = "Violet",
-                    Blanco         = "Light",
-                    ["Arcoíris"]   = "Rainbow",
-                    Planta         = "Plant",
-                    ["Índigo"]     = "Indigo",
-                    Suave          = "Mellow"
+                    ["Ámbar"]        = "Amber",
+                    Rosa             = "Rose",
+                    Esmeralda        = "Emerald",
+                    Cielo            = "Sky",
+                    Violeta          = "Violet",
+                    Blanco           = "Light",
+                    ["Arcoíris"]     = "Rainbow",
+                    Planta           = "Plant",
+                    ["Índigo"]       = "Indigo",
+                    Suave            = "Mellow"
                 }
                 WindUI:SetTheme(Themes[Theme])
                 WindUI:Notify({ Title = "Tema", Content = "Tema aplicado: " .. Theme, Duration = 2 })
